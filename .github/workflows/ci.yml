@@ -35,4 +35,4 @@ jobs:
           # port: ${{ secrets.PORT }}
           script: |
             docker rm -f ${{ secrets.DOCKER_USERNAME }}/portfolio
-            docker run -d --name resume -p 8080:5001 ${{ secrets.DOCKER_USERNAME }}/portfolio
+            docker run -d --name resume -p 8080:5001 ${{ secrets.DOCKER_USERNAME }}/portfolio:${{github.run_number}}
