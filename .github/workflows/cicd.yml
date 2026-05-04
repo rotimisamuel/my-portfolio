@@ -10,14 +10,14 @@ permissions:
   contents: read
   packages: write
   id-token: write
-  security-events: write  # required for uploading Trivy SARIF to GitHub Security tab
+  security-events: write # required for uploading Trivy SARIF to GitHub Security tab
 
 env:
   PYTHON_VERSION: "3.11"
   IMAGE_NAME: "my-portfolio"
   AWS_REGION: "us-east-1"
   AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
-  ECR_REPOSITORY: 559384370584.dkr.ecr.us-east-1.amazonaws.com/dev
+  ECR_REPOSITORY: dev
   IMAGE_TAG: ${{ github.sha }}
 
 jobs:
@@ -82,7 +82,7 @@ jobs:
           format: sarif
           output: trivy-results.sarif
           severity: CRITICAL,HIGH
-          exit-code: '0'
+          exit-code: "0"
           ignore-unfixed: true
           vuln-type: os,library
 
