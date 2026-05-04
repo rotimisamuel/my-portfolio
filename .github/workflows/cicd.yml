@@ -10,20 +10,26 @@ permissions:
   contents: read
   packages: write
   id-token: write
+  security-events: write  # required for uploading Trivy SARIF to GitHub Security tab
 
 env:
   PYTHON_VERSION: "3.11"
   IMAGE_NAME: "my-portfolio"
   AWS_REGION: "us-east-1"
   AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+  ECR_REPOSITORY: 559384370584.dkr.ecr.us-east-1.amazonaws.com/dev
+  IMAGE_TAG: ${{ github.sha }}
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      # ── 1. Checkout ────────────────────────────────────────────────────────
+      - name: Checkout code
+        uses: actions/checkout@v4
 
+      # ── 2. Python setup and tests ──────────────────────────────────────────
       - uses: actions/setup-python@v4
         with:
           python-version: ${{ env.PYTHON_VERSION }}
@@ -38,14 +44,73 @@ jobs:
           pip install pytest
           pytest test.py
 
+      # ── 3. Configure AWS credentials via OIDC ─────────────────────────────
       - name: Configure AWS credentials via OIDC
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
+      # ── 4. Log in to ECR ───────────────────────────────────────────────────
       - name: Log in to Amazon ECR
+        id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Verify AWS access
-        run: aws s3 ls
+      # ── 5. Set up Docker Buildx ────────────────────────────────────────────
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # ── 6. Build image (do NOT push yet — scan first) ──────────────────────
+      - name: Build Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: false
+          load: true
+          tags: |
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # ── 7. Run Trivy vulnerability scan ────────────────────────────────────
+      - name: Run Trivy vulnerability scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: >-
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}
+          format: sarif
+          output: trivy-results.sarif
+          severity: CRITICAL,HIGH
+          exit-code: '1'
+          ignore-unfixed: true
+          vuln-type: os,library
+
+      # ── 8. Upload Trivy results to GitHub Security tab ─────────────────────
+      - name: Upload Trivy scan results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: trivy-results.sarif
+
+      # ── 9. Push to ECR only if scan passed ─────────────────────────────────
+      - name: Push image to ECR
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # ── 10. Print image URI as workflow summary ─────────────────────────────
+      - name: Image pushed summary
+        run: |
+          echo "### Docker image pushed successfully" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Registry:** ${{ steps.login-ecr.outputs.registry }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Repository:** ${{ env.ECR_REPOSITORY }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Tag:** ${{ env.IMAGE_TAG }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Auth method:** OIDC (keyless)" >> $GITHUB_STEP_SUMMARY
