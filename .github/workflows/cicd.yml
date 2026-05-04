@@ -32,10 +32,11 @@ jobs:
           pip install -r requirements.txt
       - name: unit tests
         run: |
+          pip install pytest
           pytest test.py
 
       - name: Configure AWS credentials using OIDC
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v2
         with:
           role-to-assume: ${{ secrets.ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
