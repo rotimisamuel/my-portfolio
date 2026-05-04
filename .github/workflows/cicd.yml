@@ -15,7 +15,7 @@ env:
   IMAGE_NAME: "my-portfolio"
   AWS_REGION: "us-east-1"
   AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
-  ECR_REPOSITORY: ${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.IMAGE_NAME }}
+  ECR_REPOSITORY: $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$IMAGE_NAME
 
 jobs:
   build:
